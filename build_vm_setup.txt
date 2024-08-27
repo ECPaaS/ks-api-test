@@ -1,0 +1,342 @@
+
+ECPaaS自動化測試VM
+
+ 
+1	INTRODUCTION
+1.1	Overview
+使用python測試自動建立VM方法。
+
+2	REFERENCE
+2.1	參考文件
+1.	https://pypi.org/project/paramiko/
+
+3	測試自動建立VM及驗證連線
+3.1	前置作業
+3.1.1	系統版本資訊
+DISTRIB_ID=Ubuntu
+DISTRIB_RELEASE=20.04
+DISTRIB_CODENAME=focal
+DISTRIB_DESCRIPTION="Ubuntu 20.04.6 LTS"
+3.1.2	IMAGE
+https://cloud-images.ubuntu.com/
+
+可以在這邊找需要的官方版本 image 來作客製化，
+按需求選擇下載適合版本的 IMAGE，EX:
+
+wget https://cloud-images.ubuntu.com/releases/focal/release/ cloud- bionic-server-cloudimg-i386.img
+
+PS: 範例是抓 18.04 版本。
+
+3.1.3	工具程式
+以下步驟會用到的工具程式，可以先裝好備用。
+
+1.	Python 3.8.10
+2.	pip 24.2 (python 3.8)
+3.	paramiko 3.4.1 (pkg: python package)
+4.	系統要有curl的指令
+
+
+3.2	起動測試方法及內容
+1.	先在本地目錄放置要上傳的 image及程式，ex:
+bionic-server-cloudimg-i386.img
+build_vm1.py
+
+2.	起動要測試指令
+python3 build_vm1.py admin:Abcd1234 192.168.42.212 bionic-server-cloudimg-i386.img
+
+測試程式名稱: build_vm1.py
+user:password: admin:Abcd1234(集群登入user/password)
+Host IP(k8s): 192.168.42.212
+上傳image file: bionic-server-cloudimg-i386.img
+
+
+3.3	測試程式執行步驟
+1.	Step 1: Check upload bionic-server-cloudimg-i386.img file
+2.	step 1.1: Start upload bionic-server-cloudimg-i386.img file
+3.	step 1.2: Check upload file size
+4.	Step2:create template image with bionic-server-cloudimg-i386.img
+5.	Step2.1:Check virtual machine status from image-a355c791
+6.	Step3:Create a virtual machine template by image-a355c791
+7.	Step4:Check virtual machine status from vm-90b5756c
+8.	Step5:Get the virtual machine IP from vm-90b5756c
+9.	Step6:Test whether the PING of the virtual machine is passed from 10.233.127.173
+10.	Step7:Get all PVC data
+11.	Step8:Create Data disk of VM
+12.	Step9:Check new PVC status
+13.	Step10:Check VM
+14.	Step10.1:Mount data dick on VM
+15.	Step11:Check vm mount disk status
+16.	Step12:Confirm whether the virtual machine has been mounted with PVC
+17.	
+
+3.4	測試import程式碼
+import os
+import sys
+import time
+import json
+import re
+import paramiko
+
+
+3.5	測試記錄
+ecpaas@ecpaas42212:~/build_vm$ python3 build_vm1.py admin:Abcd1234 192.168.42.212 bionic-server-cloudimg-i386.img
+user:pw= admin:Abcd1234
+Host IP: 192.168.42.212
+upload images: bionic-server-cloudimg-i386.img
+
+================================================================================
+=============Step1:Check upload bionic-server-cloudimg-i386.img file=============
+================================================================================
+curl -X GET -u admin:Abcd1234 192.168.42.212:30880/kapis/virtualization.ecpaas.io/v1alpha1/minio/images
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100    18  100    18    0     0    219      0 --:--:-- --:--:-- --:--:--   219
+result= {
+ "items": null
+}
+Not found any body..
+
+================================================================================
+============Step1.1:Start upload bionic-server-cloudimg-i386.img file============
+================================================================================
+curl -X POST -u admin:Abcd1234 -H "Content-Type: multipart/form-data" --form "uploadfile=@bionic-server-cloudimg-i386.img" 192.168.42.212:30880/kapis/virtualization.ecpaas.io/v1alpha1/minio/image
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  356M  100   270  100  356M    166   219M  0:00:01  0:00:01 --:--:--  219M
+result= {
+ "Bucket": "ecpaas-images",
+ "Key": "bionic-server-cloudimg-i386.img",
+ "ETag": "d41d8cd98f00b204e9800998ecf8427e",
+ "Size": 0,
+ "LastModified": "0001-01-01T00:00:00Z",
+ "Location": "",
+ "VersionID": "",
+ "Expiration": "0001-01-01T00:00:00Z",
+ "ExpirationRuleID": ""
+}
+
+================================================================================
+=========================Step1.2:Check upload file size=========================
+================================================================================
+curl -X GET -u admin:Abcd1234 192.168.42.212:30880/kapis/virtualization.ecpaas.io/v1alpha1/minio/images
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   194  100   194    0     0   1940      0 --:--:-- --:--:-- --:--:--  1940
+result= {
+ "items": [
+  {
+   "name": "bionic-server-cloudimg-i386.img",
+   "location": "http://10.233.38.222:9000/ecpaas-images",
+   "lastModified": "2024-08-26T10:20:51Z",
+   "size": 373686272
+  }
+ ]
+}
+File Length: 1
+
+================================================================================
+========Step2:create template image with bionic-server-cloudimg-i386.img========
+================================================================================
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   243  100    27  100   216    272   2181 --:--:-- --:--:-- --:--:--  2479
+result= {
+ "id": "image-0139cd02"
+}
+
+================================================================================
+============Step2.1:Check virtual machine status from image-0139cd02============
+================================================================================
+NAME             PHASE             PROGRESS   RESTARTS   AGE
+image-0139cd02   ImportScheduled   N/A                   21s
+
+NAME             PHASE             PROGRESS   RESTARTS   AGE
+image-0139cd02   ImportScheduled   N/A                   41s
+
+NAME             PHASE              PROGRESS   RESTARTS   AGE
+image-0139cd02   ImportInProgress   20.13%                61s
+
+NAME             PHASE              PROGRESS   RESTARTS   AGE
+image-0139cd02   ImportInProgress   99.15%                81s
+
+NAME             PHASE              PROGRESS   RESTARTS   AGE
+image-0139cd02   ImportInProgress   99.15%                101s
+
+NAME             PHASE              PROGRESS   RESTARTS   AGE
+image-0139cd02   ImportInProgress   99.15%                2m1s
+
+NAME             PHASE       PROGRESS   RESTARTS   AGE
+image-0139cd02   Succeeded   100.0%                2m21s
+
+
+================================================================================
+============Step3:Create a virtual machine template by image-0139cd02============
+================================================================================
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   247  100    24  100   223    242   2252 --:--:-- --:--:-- --:--:--  2494
+result= {
+ "id": "vm-3b533bcf"
+}
+
+================================================================================
+===============Step4:Check virtual machine status from vm-3b533bcf===============
+================================================================================
+NAME          AGE   STATUS     READY
+vm-3b533bcf   10s   Starting   False
+
+NAME          AGE   STATUS     READY
+vm-3b533bcf   21s   Starting   False
+
+NAME          AGE   STATUS     READY
+vm-3b533bcf   31s   Starting   False
+
+NAME          AGE   STATUS     READY
+vm-3b533bcf   41s   Starting   False
+
+NAME          AGE   STATUS    READY
+vm-3b533bcf   51s   Running   True
+
+
+================================================================================
+================Step5:Get the virtual machine IP from vm-3b533bcf================
+================================================================================
+result= NAME                              READY   STATUS    RESTARTS   AGE    IP               NODE          NOMINATED NODE   READINESS GATES
+virt-launcher-vm-3b533bcf-plzbs   1/1     Running   0          56s    10.233.127.189   ecpaas42213   <none>           1/1
+virt-launcher-vm-e4581a85-zjjhw   1/1     Running   0          7d1h   10.233.89.108    ecpaas42214   <none>           1/1
+
+['NAME', 'READY', 'STATUS', 'RESTARTS', 'AGE', 'IP', 'NODE', 'NOMINATED', 'NODE', 'READINESS', 'GATES', 'virt-launcher-vm-3b533bcf-plzbs', '1/1', 'Running', '0', '56s', '10.233.127.189', 'ecpaas42213', '<none>', '1/1', 'virt-launcher-vm-e4581a85-zjjhw', '1/1', 'Running', '0', '7d1h', '10.233.89.108', 'ecpaas42214', '<none>', '1/1']
+virt-launcher-vm-3b533bcf-plzbs IP = 10.233.127.189
+The virtual machine has been final start up, please wait for 30 seconds.
+
+================================================================================
+Step6:Test whether the PING of the virtual machine is passed from 10.233.127.189
+================================================================================
+PING 10.233.127.189 (10.233.127.189) 56(84) bytes of data.
+64 bytes from 10.233.127.189: icmp_seq=1 ttl=62 time=0.728 ms
+64 bytes from 10.233.127.189: icmp_seq=2 ttl=62 time=0.798 ms
+64 bytes from 10.233.127.189: icmp_seq=3 ttl=62 time=1.53 ms
+64 bytes from 10.233.127.189: icmp_seq=4 ttl=62 time=0.704 ms
+64 bytes from 10.233.127.189: icmp_seq=5 ttl=62 time=0.622 ms
+64 bytes from 10.233.127.189: icmp_seq=6 ttl=62 time=2.61 ms
+64 bytes from 10.233.127.189: icmp_seq=7 ttl=62 time=4.18 ms
+64 bytes from 10.233.127.189: icmp_seq=8 ttl=62 time=0.523 ms
+64 bytes from 10.233.127.189: icmp_seq=9 ttl=62 time=1.50 ms
+64 bytes from 10.233.127.189: icmp_seq=10 ttl=62 time=0.559 ms
+64 bytes from 10.233.127.189: icmp_seq=11 ttl=62 time=0.590 ms
+64 bytes from 10.233.127.189: icmp_seq=12 ttl=62 time=4.06 ms
+64 bytes from 10.233.127.189: icmp_seq=13 ttl=62 time=3.92 ms
+64 bytes from 10.233.127.189: icmp_seq=14 ttl=62 time=0.886 ms
+64 bytes from 10.233.127.189: icmp_seq=15 ttl=62 time=0.948 ms
+64 bytes from 10.233.127.189: icmp_seq=16 ttl=62 time=0.608 ms
+
+--- 10.233.127.189 ping statistics ---
+16 packets transmitted, 16 received, 0% packet loss, time 15150ms
+rtt min/avg/max/mdev = 0.523/1.547/4.183/1.309 ms
+
+SSH Connect IP 10.233.127.189 ...
+b'PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.\n64 bytes from 8.8.8.8: icmp_seq=1 ttl=115 time=6.06 ms\n64 bytes from 8.8.8.8: icmp_seq=2 ttl=115 time=5.97 ms\n64 bytes from 8.8.8.8: icmp_seq=3 ttl=115 time=5.55 ms\n64 bytes from 8.8.8.8: icmp_seq=4 ttl=115 time=7.09 ms\n\n--- 8.8.8.8 ping statistics ---\n4 packets transmitted, 4 received, 0% packet loss, time 3003ms\nrtt min/avg/max/mdev = 5.554/6.173/7.091/0.564 ms\n'
+========================
+===   ping test pass ===
+========================
+
+================================================================================
+=============================Step7:Get all PVC data =============================
+================================================================================
+result= NAME                STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS     AGE
+image-0139cd02      Bound    pvc-b1af02fb-07ff-45b9-b053-d53f6635d93b   20Gi       RWO            cstor-csi-disk   4m17s
+image-a1ca61bf      Bound    pvc-9879f4de-7128-4f1c-b2aa-b43065564321   20Gi       RWO            cstor-csi-disk   35d
+new-disk-c9e8f018   Bound    pvc-d4190b35-2fa9-476f-8a98-e17680453f84   20Gi       RWO            cstor-csi-disk   35d
+tpl-disk-3b533bcf   Bound    pvc-a1da8470-7aea-4f52-82af-1b5612089203   20Gi       RWO            cstor-csi-disk   109s
+tpl-disk-e4581a85   Bound    pvc-2228e3d1-bce0-4acc-8e82-9fd2755a5fb9   20Gi       RWO            cstor-csi-disk   7d1h
+
+
+================================================================================
+==========================Step8:Create Data disk of VM==========================
+================================================================================
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100    98  100    26  100    72    302    837 --:--:-- --:--:-- --:--:--  1139
+result= {
+ "id": "disk-13e1ec0b"
+}
+New disk id =  disk-13e1ec0b
+
+================================================================================
+===========================Step9:Check new PVC status ===========================
+================================================================================
+result= NAME                STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS     AGE
+image-0139cd02      Bound    pvc-b1af02fb-07ff-45b9-b053-d53f6635d93b   20Gi       RWO            cstor-csi-disk   4m27s
+image-a1ca61bf      Bound    pvc-9879f4de-7128-4f1c-b2aa-b43065564321   20Gi       RWO            cstor-csi-disk   35d
+new-disk-13e1ec0b   Bound    pvc-a46e37e5-abcb-45b9-b191-bd7ac1ae8366   10Gi       RWO            cstor-csi-disk   10s
+new-disk-c9e8f018   Bound    pvc-d4190b35-2fa9-476f-8a98-e17680453f84   20Gi       RWO            cstor-csi-disk   35d
+tpl-disk-3b533bcf   Bound    pvc-a1da8470-7aea-4f52-82af-1b5612089203   20Gi       RWO            cstor-csi-disk   119s
+tpl-disk-e4581a85   Bound    pvc-2228e3d1-bce0-4acc-8e82-9fd2755a5fb9   20Gi       RWO            cstor-csi-disk   7d1h
+
+=============================================
+The data disk of disk-13e1ec0b has been bound
+=============================================
+
+================================================================================
+=================================Step10:Check VM=================================
+================================================================================
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  1198  100  1198    0     0  13770      0 --:--:-- --:--:-- --:--:-- 13930
+{'id': 'vm-3b533bcf', 'name': 'h1', 'namespace': 'default', 'description': '', 'cpu_cores': 1, 'memory': 2, 'image': {'id': 'image-0139cd02', 'namespace': 'default', 'size': 20}, 'disks': [{'id': 'disk-3b533bcf', 'name': 'h1', 'namespace': 'default', 'description': '', 'type': 'system', 'size': 20, 'mode': 'rw', 'minio_image_name': '', 'status': {'ready': True, 'owner': 'vm-3b533bcf'}}], 'status': {'ready': True, 'state': 'Running'}}
+
+================================================================================
+=========================Step10.1:Mount data dick on VM=========================
+================================================================================
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100    78    0     0  100    78      0    812 --:--:-- --:--:-- --:--:--   812
+result=
+
+================================================================================
+=======================Step11:Check vm mount disk status =======================
+================================================================================
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   761  100   761    0     0   9059      0 --:--:-- --:--:-- --:--:--  9059
+{'id': 'disk-13e1ec0b', 'name': 'data1', 'namespace': 'default', 'description': '', 'type': 'data', 'size': 10, 'mode': 'rw', 'minio_image_name': '', 'status': {'ready': True, 'owner': 'vm-3b533bcf'}}
+=============================================
+The data disk of disk-13e1ec0b has been mount
+=============================================
+
+================================================================================
+======Step12:Confirm whether the virtual machine has been mounted with PVC======
+================================================================================
+SSH Connect IP 10.233.127.189 ...
+b'NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT\nvda    252:0    0    1M  0 disk \nvdb    252:16   0 18.4G  0 disk \n\xe2\x94\x94\xe2\x94\x80vdb1 252:17   0 18.4G  0 part /\n'
+NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+vda    252:0    0    1M  0 disk
+vdb    252:16   0 18.4G  0 disk
+└─vdb1 252:17   0 18.4G  0 part /
+
+SSH Connect IP 10.233.127.189 ...
+b'NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT\nsda      8:0    0   10G  0 disk \nvda    252:0    0    1M  0 disk \nvdb    252:16   0 18.4G  0 disk \n\xe2\x94\x94\xe2\x94\x80vdb1 252:17   0 18.4G  0 part /\n'
+NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda      8:0    0   10G  0 disk
+vda    252:0    0    1M  0 disk
+vdb    252:16   0 18.4G  0 disk
+└─vdb1 252:17   0 18.4G  0 part /
+
+===========================================================
+The new PVC has been mounted on the virtual machine => PASS
+===========================================================
+ecpaas@ecpaas42212:~/build_vm$
+3.6	FAQ
+3.6.1	上傳要製作範本的img
+測試前可以先透過ecpaas的WeB介面上傳要製作範本的檔案, 讓檔案先存在ecpaas的集群中, 自動測試會先判斷要製作範本的檔案是否巳經存在集群中, 如果不存在, 會由本地的目錄上傳製作範本的檔案
+
+3.6.2	測試中的重試
+在測試步驟中, 有些測試會自動重試自集群中取得測試下一步驟所需要的條件, 所以測試步驟中會有一些重覆訊息
+3.6.3	測試中的認證錯誤
+在測試中如果執行curl在認證錯誤會(openssl / x501…), 而python不能執行pip list時, 可能是認證出錯, 可以執行如下:
+sudo apt-get remove python3
+sudo apt-get install python3
+sudo apt-get upgrade openssl
+sudo apt-get install python3-pip
+將python3及pip重安裝
+
