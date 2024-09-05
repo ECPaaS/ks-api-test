@@ -78,6 +78,7 @@ vm_namespace = config['vm']['namespace']
 vm_data_disk_name = config['vm']['data_disk_name']
 vm_data_disk_size = int(config['vm']['data_disk_size'])
 create_host_num = int(config['host_num']['num'])
+create_disk_num = int(config['host_disk_num']['num'])
 
 if len(sys.argv) < 4:
     print('no argument')
@@ -345,24 +346,31 @@ result_k8s = os.popen(cmd1).read()
 print("result= %s" % result_k8s)
 
 show_step(9, "Create Data disk of VM")
-vm_data_disk_list = []
+vm_data_disk_list=[]
+total_vm_disk_list=[]
+total_disk_num=create_host_num*create_disk_num
 for x in range(1, create_host_num+1):
-    data = {
-        "description": "",
-        "name": vm_data_disk_name+str(x),
-        "namespace": vm_namespace,
-        "size": vm_data_disk_size
-    }
-    url = "/kapis/virtualization.ecpaas.io/v1/namespaces/%s/disks" % vm_namespace
-    cmd1 = 'curl -u '+user_pw+' -H "Content-Type: application/json" -X POST -d \''+json.dumps(data)+'\' '+host_ip+':30880'+url
-    result = os.popen(cmd1).read()
-    print("New disk id= %s" % result)
-    # # # result_dict= {
-    # # #  "id": "disk-7f43ef58"
-    # # # }
-    result_dict = json.loads(result)
-    vm_data_disk_list.append(result_dict["id"])
-    time.sleep(5)
+    data_disk_list=[]
+    for y in range(1, create_disk_num+1):
+        data = {
+            "description": "",
+            "name": vm_data_disk_name+str(x)+str(y),
+            "namespace": vm_namespace,
+            "size": vm_data_disk_size
+        }
+        url = "/kapis/virtualization.ecpaas.io/v1/namespaces/%s/disks" % vm_namespace
+        cmd1 = 'curl -u '+user_pw+' -H "Content-Type: application/json" -X POST -d \''+json.dumps(data)+'\' '+host_ip+':30880'+url
+        result = os.popen(cmd1).read()
+        print("New disk id= %s" % result)
+        # # # result_dict= {
+        # # #  "id": "disk-7f43ef58"
+        # # # }
+        result_dict = json.loads(result)
+        data_disk_list.append(result_dict["id"])
+        total_vm_disk_list.append(result_dict["id"])
+        time.sleep(5)
+    vm_data_disk_list.append(data_disk_list)
+
 
 
 show_step(10, "Check new PVC status ")
@@ -370,8 +378,8 @@ if vm_namespace == "default":
     cmd1="kubectl get pvc"
 else:
     cmd1="kubectl get pvc -n %s" % vm_namespace
-for x in range(0, 10):
-    time.sleep(10)
+for x in range(0, 16):
+    time.sleep(15)
     result_status = os.popen(cmd1).read()
     print("result= %s" % result_status)
     list_data = ",".join(result_status.split())
@@ -380,16 +388,16 @@ for x in range(0, 10):
     loop_mark=1
     disk_pass_num=0
     for data_loc in range(0, list_data_len):
-        for disk_data in vm_data_disk_list:
+        for disk_data in total_vm_disk_list:
             if disk_data in list_data[data_loc] and "Bound" in list_data[data_loc+1]: disk_pass_num+=1
-        if disk_pass_num == len(vm_data_disk_list): loop_mark=0
+        if disk_pass_num == len(total_vm_disk_list): loop_mark=0
 
     if loop_mark == 0:
         msg = "The data disk of all has been bound"
         show_msg(msg)
-        show_msg(", ".join(vm_data_disk_list))
+        show_msg(", ".join(total_vm_disk_list))
         break
-    if x < 9: continue
+    if x < 14: continue
     print("Create new data disk. fail")
     sys.exit(0)
 
@@ -420,22 +428,25 @@ if loop_mark == 1:
 
 show_step(12, "Mount data dick on VM")
 for i in range(0, len(vm_name_id_list)):
-    data = {
-        "disk": [
-            {
-                "action": "mount",
-                "id": vm_data_disk_list[i],
-                "namespace": vm_namespace
-            }
-        ]
-    }
-    url = "/kapis/virtualization.ecpaas.io/v1/namespaces/%s/virtualmachines/%s" % (vm_namespace, vm_name_id_list[i])
-    cmd1 = 'curl -u '+user_pw+' -H "Content-Type: application/json" -X PUT -d \''+json.dumps(data)+'\' '+host_ip+':30880'+url
-    result = os.popen(cmd1).read()
-    show_msg(vm_name_id_list[i] + " mount result = "+result)
-    time.sleep(3)
+    for j in range(0, create_disk_num):
+        data = {
+            "disk": [
+                {
+                    "action": "mount",
+                    "id": vm_data_disk_list[i][j],
+                    "namespace": vm_namespace
+                }
+            ]
+        }
+        url = "/kapis/virtualization.ecpaas.io/v1/namespaces/%s/virtualmachines/%s" % (vm_namespace, vm_name_id_list[i])
+        cmd1 = 'curl -u '+user_pw+' -H "Content-Type: application/json" -X PUT -d \''+json.dumps(data)+'\' '+host_ip+':30880'+url
+        result = os.popen(cmd1).read()
+        show_msg(vm_name_id_list[i] + " mount result = "+result)
+        time.sleep(3)
+
 
 show_step(13, "Check vm mount disk status ")
+vm_mount_pass=0
 for i in range(0, len(vm_name_id_list)):
     for x in range(0, 6):
         url = "/kapis/virtualization.ecpaas.io/v1/namespaces/%s/virtualmachines/%s" % (vm_namespace, vm_name_id_list[i])
@@ -445,13 +456,14 @@ for i in range(0, len(vm_name_id_list)):
         #print("result= %s" % result_status)
         result_dict = json.loads(result_status)
         disk_data = result_dict["disks"]
-        loop_mark=1
-        for data_loc in range(0, len(disk_data)):
-            print(disk_data[data_loc])
-            if vm_data_disk_list[i] in disk_data[data_loc]["id"]:
-                loop_mark=0
-                break
-        if loop_mark == 0:
+        loop_mark=0
+        for j in range(0, create_disk_num):
+            for data_loc in range(0, len(disk_data)):
+                if vm_data_disk_list[i][j] in disk_data[data_loc]["id"]:
+                    print(disk_data[data_loc])
+                    loop_mark+=1
+                    break
+        if loop_mark == create_disk_num:
             msg = "The data disk of %s has been mount" % vm_data_disk_list[i]
             show_msg(msg)
             break
@@ -508,6 +520,7 @@ for data_loc in range(0, list_data_len):
 
 
 show_step(16, "Confirm whether the virtual machine has been mounted with PVC")
+chk_size = str(vm_data_disk_size)+"G"
 for i in range(0, len(vm_ip_list)):
     vm_cfg = {
         "mgmt_ip": vm_ip_list[i],
@@ -515,16 +528,15 @@ for i in range(0, len(vm_ip_list)):
         "password": "abc1234"
     }
     pass_mark=0
-    chk_size = str(vm_data_disk_size)+"G"
     for x in range(0, 6):
-        time.sleep(10)
+        time.sleep(5)
         vm_connect = SSH_CONNECT(vm_cfg)
         ssh_result = vm_connect.run_cmd("lsblk", False).decode().split("\n")
         for p in ssh_result:
             print(p)
-            if chk_size in p: pass_mark=1
-        if(pass_mark == 1):
+            if "sd" in p and chk_size in p: pass_mark+=1
+        if(pass_mark == create_disk_num):
             msg = "The virtual machine of IP %s have a data disk mounted => PASS" % vm_ip_list[i]
             show_msg(msg)
             break
-    if pass_mark == 0: print("The virtual machine of IP %s does not have a data disk mounted => FAIL")
+    if pass_mark != create_disk_num: print("The virtual machine of IP %s does not have a data disk mounted => FAIL")
